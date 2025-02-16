@@ -10,7 +10,8 @@ pub trait IAttenSysCourse<TContractState> {
         accessment_: bool,
         base_uri: ByteArray,
         name_: ByteArray,
-        symbol: ByteArray
+        symbol: ByteArray,
+        course_ipfs_uri: ByteArray
     ) -> ContractAddress;
     fn add_replace_course_content(
         ref self: TContractState,
@@ -81,6 +82,7 @@ pub mod AttenSysCourse {
         pub base_uri: ByteArray,
         pub name_: ByteArray,
         pub symbol: ByteArray,
+        pub course_ipfs_uri: ByteArray,
     }
 
     #[derive(starknet::Event, Clone, Debug, Drop)]
@@ -139,12 +141,13 @@ pub mod AttenSysCourse {
 
     //consider the idea of having the uri for each course within the course struct.
 
-    #[derive(Drop, Copy, Serde, starknet::Store)]
+    #[derive(Drop, Clone, Serde, starknet::Store)]
     pub struct Course {
         pub owner: ContractAddress,
         pub course_identifier: u256,
         pub accessment: bool,
         pub uri: Uri,
+        pub course_ipfs_uri: ByteArray,
     }
 
     #[derive(Drop, Copy, Serde, starknet::Store)]
@@ -167,7 +170,8 @@ pub mod AttenSysCourse {
             accessment_: bool,
             base_uri: ByteArray,
             name_: ByteArray,
-            symbol: ByteArray
+            symbol: ByteArray,
+            course_ipfs_uri: ByteArray
         ) -> ContractAddress {
             //make an address zero check
             let identifier_count = self.identifier_tracker.read();
@@ -187,9 +191,16 @@ pub mod AttenSysCourse {
                 course_identifier: current_identifier,
                 accessment: accessment_,
                 uri: empty_uri,
+                course_ipfs_uri: course_ipfs_uri.clone()
             };
 
-            self.creator_to_all_content.entry(owner_).append().write(course_call_data);
+            self.creator_to_all_content.entry(owner_).append().write(Course {
+                owner: owner_,
+                course_identifier: current_identifier,
+                accessment: accessment_,
+                uri: empty_uri,
+                course_ipfs_uri: course_ipfs_uri.clone()
+            });
             self.course_creator_info.entry(owner_).write(current_creator_info);
             self
                 .specific_course_info_with_identifer
@@ -226,6 +237,7 @@ pub mod AttenSysCourse {
                         base_uri: base_uri,
                         name_: name_,
                         symbol: symbol,
+                        course_ipfs_uri: course_ipfs_uri,
                     }
                 );
             deployed_contract_address
@@ -254,12 +266,12 @@ pub mod AttenSysCourse {
             self
                 .specific_course_info_with_identifer
                 .entry(course_identifier)
-                .write(current_course_info);
+                .write(current_course_info.clone());
 
             //run a loop to check if course ID exists in all course info vece, if it does, replace
             //the uris.
             if self.all_course_info.len() == 0 {
-                self.all_course_info.append().write(current_course_info);
+                self.all_course_info.append().write(current_course_info.clone());
             } else {
                 for i in 0
                     ..self
@@ -272,7 +284,7 @@ pub mod AttenSysCourse {
                                 .course_identifier == course_identifier {
                                 self.all_course_info.at(i).uri.write(call_data);
                             } else {
-                                self.all_course_info.append().write(current_course_info);
+                                self.all_course_info.append().write(current_course_info.clone());
                             }
                         };
             };

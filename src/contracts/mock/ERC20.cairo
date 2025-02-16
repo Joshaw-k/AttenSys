@@ -1,5 +1,5 @@
 #[starknet::contract]
-pub mod AttenSysToken {
+mod ERC20 {
     use openzeppelin::token::erc20::{ERC20Component, ERC20HooksEmptyImpl};
     use starknet::ContractAddress;
 
@@ -24,11 +24,15 @@ pub mod AttenSysToken {
     }
 
     #[constructor]
-    fn constructor(ref self: ContractState, recipient: ContractAddress) {
+    fn constructor(
+        ref self: ContractState,
+        initial_supply: u256,
+        recipient: ContractAddress
+    ) {
         let name = "MyToken";
         let symbol = "MTK";
 
         self.erc20.initializer(name, symbol);
-        self.erc20.mint(recipient, 20000);
+        self.erc20._mint(recipient, initial_supply);
     }
 }
