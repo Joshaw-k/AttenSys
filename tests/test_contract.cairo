@@ -23,11 +23,8 @@ use attendsys::contracts::AttenSysOrg::AttenSysOrg::{
     OrganizationProfile, InstructorAddedToOrg, InstructorRemovedFromOrg, BootCampCreated,
     ActiveMeetLinkAdded, BootcampRegistration, RegistrationApproved
 };
-// use attendsys::contracts::AttenSysSponsor::IAttenSysSponsorDispatcher;
-// use attendsys::contracts::AttenSysSponsor::IAttenSysSponsorDispatcherTrait;
-// use attendsys::contracts::AttenSysSponsor::IERC20Dispatcher;
-// use attendsys::contracts::AttenSysSponsor::IERC20DispatcherTrait;
-use attendsys::contracts::AttenSysSponsor::AttenSysSponsor;
+
+// use attendsys::contracts::AttenSysSponsor::IAttenSysSponsor;
 use attendsys::contracts::AttenSysSponsor::IAttenSysSponsorDispatcher;
 use attendsys::contracts::AttenSysSponsor::IAttenSysSponsorDispatcherTrait;
 use attendsys::contracts::AttenSysSponsor::IERC20Dispatcher;
@@ -135,13 +132,14 @@ fn deploy_nft_contract(name: ByteArray) -> (ContractAddress, ClassHash) {
     (contract_address, contract.class_hash)
 }
 
-fn deploy_erc20_token(name: ByteArray) -> ContractAddress {
+fn deploy_erc20_token(name: ByteArray, recipient: ContractAddress) -> ContractAddress {
     let name_: ByteArray = "Attensys";
     let symbol: ByteArray = "ATS";
     let mut constructor_calldata = ArrayTrait::new();
 
     name_.serialize(ref constructor_calldata);
     symbol.serialize(ref constructor_calldata);
+    recipient.serialize(ref constructor_calldata);
 
     let contract = declare(name).unwrap();
     let (contract_address, _) = contract.deploy(@constructor_calldata).unwrap();
@@ -961,8 +959,42 @@ fn test_when_no_org_address_add_instructor_to_org() {
 }
 
 #[test]
+fn test_deposit_sponsorship() {
+    // create dummy addresses to serve as event and organization
+    let org_address = contract_address_const::<'org_address'>();
+    let event_address = contract_address_const::<'event_address'>();
+    // deploy ERCs 
+    let token_address = deploy_erc20_token("AttenSysToken", org_address);
+
+    // deploy the sponsorship contract
+    let sponsor_contract_addr = deploy_sponsorship_contract(org_address, event_address);
+
+    // prank dummy organization address to call deposit on the sponsorship contract   
+    start_cheat_caller_address(token_address, org_address);
+
+    // make the org_address - the dummy address - give approval to the sponsorship contract   
+    let dispatcherForToken = IERC20Dispatcher {
+        contract_address: token_address
+    };
+    dispatcherForToken.approve(sponsor_contract_addr, 100000);
+    let bal = dispatcherForToken.balanceOf(org_address);
+    println!("org balance {}", bal);
+    let allowance = dispatcherForToken.allowance(org_address, sponsor_contract_addr);
+    println!("org allowance {}", allowance);
+    // setup the sponsorship contract so as to call deposit
+    let sponsor_dispatcher = IAttenSysSponsorDispatcher {
+        contract_address: sponsor_contract_addr
+    };
+
+    start_cheat_caller_address(sponsor_contract_addr, token_address);
+    sponsor_dispatcher.deposit(token_address, 100000);
+}
+
+
+#[test]
 fn test_sponsor_organization() {
-    let token_address = deploy_erc20_token("AttenSysToken");
+    let recipient = contract_address_const::<'recipient_address'>();
+    let token_address = deploy_erc20_token("AttenSysToken", recipient);
     let (_nft_address, hash) = deploy_nft_contract("AttenSysNft");
 
     let org_address = contract_address_const::<'org_address'>();
@@ -986,7 +1018,7 @@ fn test_sponsor_organization() {
     let dispatcherForToken = IERC20Dispatcher {
         contract_address: token_address
     };
-    dispatcherForToken.approve(sponsor_contract_addr, 100000);
+    dispatcherForToken.approve(org_contract_address, 100000);
 
     let org = dispatcher.get_org_info(org_address);
     let org_addr = org.address_of_org;
@@ -1012,7 +1044,8 @@ fn test_sponsor_organization() {
 #[test]
 #[should_panic(expected: "unassociated org N instructor")]
 fn test_unauthorized_withdraw_sponsorship_fund() {
-    let token_address = deploy_erc20_token("AttenSysToken");
+    let recipient = contract_address_const::<'recipient_address'>();
+    let token_address = deploy_erc20_token("AttenSysToken", recipient);
     let (_nft_address, hash) = deploy_nft_contract("AttenSysNft");
 
     let org_address = contract_address_const::<'org_address'>();
@@ -1055,7 +1088,8 @@ fn test_unauthorized_withdraw_sponsorship_fund() {
 
 #[test]
 fn test_authorized_withdraw_sponsorship_fund() {
-    let token_address = deploy_erc20_token("AttenSysToken");
+    let recipient = contract_address_const::<'recipient_address'>();
+    let token_address = deploy_erc20_token("AttenSysToken", recipient);
     let (_nft_address, hash) = deploy_nft_contract("AttenSysNft");
 
     let org_address = contract_address_const::<'org_address'>();
